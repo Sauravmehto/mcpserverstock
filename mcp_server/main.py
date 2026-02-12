@@ -35,6 +35,14 @@ def resolve_transport_mode(configured_mode: str) -> str:
     return "stdio"
 
 
+def resolve_http_transport(configured_transport: str) -> str:
+    """Resolve effective HTTP transport mode for MCP over HTTP."""
+
+    if configured_transport in {"sse", "streamable"}:
+        return configured_transport
+    return "sse"
+
+
 async def run() -> None:
     """Initialize services and run MCP server."""
 
@@ -64,10 +72,16 @@ async def run() -> None:
         return JSONResponse({"status": "ok", "service": settings.app_name, "mode": resolved_mode})
 
     resolved_mode = resolve_transport_mode(settings.transport_mode)
-    LOGGER.info("Starting MCP server", extra={"transport_mode": resolved_mode})
+    resolved_http_transport = resolve_http_transport(settings.http_transport)
+    LOGGER.info(
+        "Starting MCP server",
+        extra={"transport_mode": resolved_mode, "http_transport": resolved_http_transport},
+    )
     try:
         if resolved_mode == "stdio":
             await mcp.run_stdio_async()
+        elif resolved_http_transport == "streamable":
+            await mcp.run_streamable_http_async()
         else:
             await mcp.run_sse_async()
     finally:

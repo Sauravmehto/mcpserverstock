@@ -13,7 +13,7 @@ from mcp_server.analysis.metrics import compute_metrics
 from mcp_server.analysis.signal_engine import generate_signal
 from mcp_server.config.settings import Settings
 from mcp_server.indicators.technical import compute_technicals_from_bars
-from mcp_server.providers.router import ProviderRouter
+from mcp_server.providers.router import ProviderRouter, RoutedData
 from mcp_server.schemas.models import ResearchRequest, StockResearchResult
 from mcp_server.scoring.engine import composite_score
 
@@ -56,6 +56,128 @@ def register_stock_tools(
         return json.dumps(
             sentiment.model_dump(mode="json") if sentiment else {"ticker": ticker, "error": "sentiment_unavailable"},
             default=str,
+        )
+
+    @mcp.tool(name="get_stock_price")
+    async def get_stock_price(ticker: str) -> str:
+        routed = await router.get_price_routed(ticker.upper())
+        if not routed.data:
+            return _format_missing("get_stock_price", ticker, routed.fallback_warning)
+        return _format_success(
+            (
+                f"{routed.data.ticker}: ${routed.data.price:.2f}"
+                if routed.data.price is not None
+                else f"{routed.data.ticker}: price unavailable"
+            ),
+            routed,
+        )
+
+    @mcp.tool(name="get_quote")
+    async def get_quote(ticker: str) -> str:
+        routed = await router.get_quote_routed(ticker.upper())
+        if not routed.data:
+            return _format_missing("get_quote", ticker, routed.fallback_warning)
+        quote = routed.data
+        change_text = "n/a"
+        if quote.change is not None and quote.change_percent is not None:
+            sign = "+" if quote.change >= 0 else ""
+            change_text = f"{sign}{quote.change:.2f} ({sign}{quote.change_percent:.2f}%)"
+        return _format_success(
+            (
+                f"{quote.ticker} quote: price=${quote.price:.2f} "
+                f"change={change_text} high={_fmt_num(quote.high)} low={_fmt_num(quote.low)} "
+                f"open={_fmt_num(quote.open)} prev_close={_fmt_num(quote.previous_close)}"
+            ),
+            routed,
+        )
+
+    @mcp.tool(name="get_company_profile")
+    async def get_company_profile(ticker: str) -> str:
+        routed = await router.get_company_profile_routed(ticker.upper())
+        if not routed.data:
+            return _format_missing("get_company_profile", ticker, routed.fallback_warning)
+        profile = routed.data
+        return _format_success(
+            (
+                f"{profile.ticker} profile: name={profile.name or 'n/a'} exchange={profile.exchange or 'n/a'} "
+                f"industry={profile.industry or 'n/a'} sector={profile.sector or 'n/a'} "
+                f"country={profile.country or 'n/a'} market_cap={_fmt_num(profile.market_cap)} "
+                f"website={profile.website or 'n/a'}"
+            ),
+            routed,
+        )
+
+    @mcp.tool(name="get_candles")
+    async def get_candles(ticker: str, timeframe: str = "swing", limit: int = 20) -> str:
+        routed = await router.get_candles_routed(ticker.upper(), timeframe, limit)
+        candles = routed.data or []
+        if not candles:
+            return _format_missing("get_candles", ticker, routed.fallback_warning)
+        latest = candles[-1]
+        return _format_success(
+            (
+                f"{ticker.upper()} candles ({timeframe}, count={len(candles)}): "
+                f"latest={latest.date.isoformat()} O={latest.open:.2f} H={latest.high:.2f} "
+                f"L={latest.low:.2f} C={latest.close:.2f} V={latest.volume:.0f}"
+            ),
+            routed,
+        )
+
+    @mcp.tool(name="get_stock_news")
+    async def get_stock_news(ticker: str, limit: int = 5) -> str:
+        routed = await router.get_stock_news_routed(ticker.upper(), limit)
+        if not routed.data or not routed.data.items:
+            return _format_missing("get_stock_news", ticker, routed.fallback_warning)
+        headlines = "; ".join(item.headline for item in routed.data.items[:limit])
+        return _format_success(
+            f"{ticker.upper()} news ({len(routed.data.items)} items): {headlines}",
+            routed,
+        )
+
+    @mcp.tool(name="get_rsi")
+    async def get_rsi(ticker: str, timeframe: str = "swing") -> str:
+        routed = await router.get_rsi_routed(ticker.upper(), timeframe)
+        if not routed.data or routed.data.value is None:
+            return _format_missing("get_rsi", ticker, routed.fallback_warning)
+        state = "neutral"
+        if routed.data.value >= 70:
+            state = "overbought"
+        elif routed.data.value <= 30:
+            state = "oversold"
+        return _format_success(
+            f"{ticker.upper()} RSI ({timeframe}): {routed.data.value:.2f} ({state})",
+            routed,
+        )
+
+    @mcp.tool(name="get_macd")
+    async def get_macd(ticker: str, timeframe: str = "swing") -> str:
+        routed = await router.get_macd_routed(ticker.upper(), timeframe)
+        if not routed.data or routed.data.macd is None:
+            return _format_missing("get_macd", ticker, routed.fallback_warning)
+        macd = routed.data
+        return _format_success(
+            (
+                f"{ticker.upper()} MACD ({timeframe}): macd={macd.macd:.4f} "
+                f"signal={_fmt_num(macd.signal, digits=4)} hist={_fmt_num(macd.histogram, digits=4)}"
+            ),
+            routed,
+        )
+
+    @mcp.tool(name="get_key_financials")
+    async def get_key_financials(ticker: str) -> str:
+        routed = await router.get_key_financials_routed(ticker.upper())
+        if not routed.data:
+            return _format_missing("get_key_financials", ticker, routed.fallback_warning)
+        fin = routed.data
+        return _format_success(
+            (
+                f"{ticker.upper()} key financials: market_cap={_fmt_num(fin.market_cap)} "
+                f"pe_ttm={_fmt_num(fin.pe_ttm)} forward_pe={_fmt_num(fin.forward_pe)} "
+                f"ps_ttm={_fmt_num(fin.ps_ttm)} beta={_fmt_num(fin.beta)} "
+                f"eps_ttm={_fmt_num(fin.eps_ttm)} dividend_yield={_fmt_num(fin.dividend_yield)} "
+                f"profit_margin={_fmt_num(fin.profit_margin)}"
+            ),
+            routed,
         )
 
     @mcp.tool(name="analyze_stock")
@@ -157,5 +279,22 @@ async def _run_full_analysis(
         assumptions=sections.assumptions,
         signal_if_requested=signal_if_requested,
     )
+
+
+def _format_success(text: str, routed: RoutedData[Any]) -> str:
+    warning = f"\nwarning: {routed.fallback_warning}" if routed.fallback_warning else ""
+    source = f"\nsource: {routed.source}" if routed.source else ""
+    return f"{text}{source}{warning}"
+
+
+def _format_missing(tool_name: str, ticker: str, warning: str | None) -> str:
+    details = warning or "No provider returned data."
+    return f"{tool_name} unavailable for {ticker.upper()}. {details}"
+
+
+def _fmt_num(value: float | None, digits: int = 2) -> str:
+    if value is None:
+        return "n/a"
+    return f"{value:.{digits}f}"
 
 

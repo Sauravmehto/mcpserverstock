@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
     transport_mode: Literal["auto", "stdio", "http"] = "auto"
+    http_transport: Literal["sse", "streamable"] = "sse"
     host: str = "0.0.0.0"
     port: int = 8000
     mcp_path: str = "/mcp"

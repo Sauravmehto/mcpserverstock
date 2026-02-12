@@ -33,6 +33,36 @@ class PriceData(BaseModel):
     source: str
 
 
+class QuoteData(BaseModel):
+    """Normalized real-time quote snapshot."""
+
+    ticker: str
+    price: float | None = None
+    change: float | None = None
+    change_percent: float | None = None
+    high: float | None = None
+    low: float | None = None
+    open: float | None = None
+    previous_close: float | None = None
+    timestamp: datetime | None = None
+    source: str
+
+
+class CompanyProfileData(BaseModel):
+    """Normalized company profile data."""
+
+    ticker: str
+    name: str | None = None
+    exchange: str | None = None
+    industry: str | None = None
+    sector: str | None = None
+    country: str | None = None
+    market_cap: float | None = None
+    website: str | None = None
+    ipo: date | None = None
+    source: str
+
+
 class OHLCVBar(BaseModel):
     """Normalized OHLCV row."""
 
@@ -42,6 +72,57 @@ class OHLCVBar(BaseModel):
     low: float
     close: float
     volume: float
+
+
+class StockNewsItem(BaseModel):
+    """News item for trading-oriented tools."""
+
+    headline: str
+    summary: str | None = None
+    source: str | None = None
+    url: str | None = None
+    published_at: datetime | None = None
+
+
+class StockNewsData(BaseModel):
+    """Normalized stock news list."""
+
+    ticker: str
+    items: list[StockNewsItem] = Field(default_factory=list)
+    source: str
+
+
+class RSIData(BaseModel):
+    """Normalized RSI indicator payload."""
+
+    ticker: str
+    value: float | None = None
+    source: str
+
+
+class MACDData(BaseModel):
+    """Normalized MACD indicator payload."""
+
+    ticker: str
+    macd: float | None = None
+    signal: float | None = None
+    histogram: float | None = None
+    source: str
+
+
+class KeyFinancialsData(BaseModel):
+    """Normalized key financials for quick inspection tools."""
+
+    ticker: str
+    market_cap: float | None = None
+    pe_ttm: float | None = None
+    forward_pe: float | None = None
+    ps_ttm: float | None = None
+    beta: float | None = None
+    eps_ttm: float | None = None
+    dividend_yield: float | None = None
+    profit_margin: float | None = None
+    source: str
 
 
 class TechnicalsData(BaseModel):
