@@ -24,6 +24,9 @@ LOGGER = logging.getLogger(__name__)
 def resolve_transport_mode(configured_mode: str) -> str:
     """Resolve effective transport mode for local vs hosted environments."""
 
+    # Render web services must bind an HTTP port. Force HTTP if stdio is configured.
+    if os.getenv("RENDER") and configured_mode == "stdio":
+        return "http"
     if configured_mode in {"stdio", "http"}:
         return configured_mode
     # Auto mode: prefer HTTP on hosted environments, stdio locally.
